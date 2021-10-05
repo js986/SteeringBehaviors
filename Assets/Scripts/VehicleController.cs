@@ -6,6 +6,7 @@ public class VehicleController : MonoBehaviour
 {
     public Vector2 velocity;
     public Vector2 acceleration;
+    public GameObject pursueTarget; //Target for pursue behavior
     public enum Behavior {
         SEEK,
         FLEE,
@@ -47,31 +48,41 @@ public class VehicleController : MonoBehaviour
     {
         switch (agentBehavior) {
             case Behavior.SEEK:
-                Seek(Camera.main.ScreenToWorldPoint(Input.mousePosition));
+                velocity+=Seek(Camera.main.ScreenToWorldPoint(Input.mousePosition));
                 break;
             case Behavior.FLEE:
-                Flee(Camera.main.ScreenToWorldPoint(Input.mousePosition));
+                velocity+=Flee(Camera.main.ScreenToWorldPoint(Input.mousePosition));
                 break;
             case Behavior.ARRIVE:
-                Arrive(Camera.main.ScreenToWorldPoint(Input.mousePosition));
+                velocity+=Arrive(Camera.main.ScreenToWorldPoint(Input.mousePosition));
                 break;
             case Behavior.PURSUE:
+                velocity+=Pursue(pursueTarget);
                 break;
             case Behavior.EVADE:
+                velocity += Evade(pursueTarget);
                 break;
             case Behavior.WANDER:
-                Wander();
+                velocity+=Wander();
                 break;
             case Behavior.WANDERNOISE:
-                WanderNoise();
+                velocity+=WanderNoise();
                 break;
             case Behavior.OBSTACLEAVOID:
                 break;
         }
 
+        velocity = Vector2.ClampMagnitude(velocity, maxSpeed);
+        transform.position += new Vector3(velocity.x, velocity.y, 0f) * Time.fixedDeltaTime;
+        float angle = Mathf.Atan2(velocity.y, velocity.x) * Mathf.Rad2Deg;
+        angle -= 90f;
+
+        Quaternion q = Quaternion.AngleAxis(angle, Vector3.forward);
+        transform.rotation = q;
+
     }
 
-    void Seek(Vector2 target)
+    Vector2 Seek(Vector2 target)
     {
         Vector2 desired = target - new Vector2(agent.transform.position.x, agent.transform.position.y);
         desired.Normalize();
@@ -79,43 +90,29 @@ public class VehicleController : MonoBehaviour
         Vector2 steer = desired - velocity;
         steer = Vector2.ClampMagnitude(steer, maxForce);
 
-        velocity += steer;
-        velocity = Vector2.ClampMagnitude(velocity, maxSpeed);
-        agent.transform.position += new Vector3(velocity.x,velocity.y, 0f) * Time.fixedDeltaTime;
-        float angle = Mathf.Atan2(velocity.y, velocity.x) * Mathf.Rad2Deg;
-        angle -= 90f;
-    
-        Quaternion q = Quaternion.AngleAxis(angle, Vector3.forward);
-        agent.transform.rotation = q;
-        //agent.transform.Translate(velocity * Time.fixedDeltaTime);
-
-        Debug.DrawLine(agent.transform.position,velocity.normalized, Color.green);
+        Debug.DrawLine(agent.transform.position, velocity.normalized, Color.green);
         Debug.DrawLine(agent.transform.position, steer.normalized, Color.red);
         Debug.DrawLine(agent.transform.position, desired, Color.blue);
+
+        return steer;
+        
     }
 
-    void Flee(Vector2 target)
+    Vector2 Flee(Vector2 target)
     {
         Vector2 desired = new Vector2(agent.transform.position.x, agent.transform.position.y) - target;
         desired.Normalize();
         desired *= maxSpeed;
         Vector2 steer = desired - velocity;
         steer = Vector2.ClampMagnitude(steer, maxForce);
-
-        velocity += steer;
-        velocity = Vector2.ClampMagnitude(velocity, maxSpeed);
-        agent.transform.position += new Vector3(velocity.x, velocity.y, 0f) * Time.fixedDeltaTime;
-        float angle = Mathf.Atan2(velocity.y, velocity.x) * Mathf.Rad2Deg;
-        angle -= 90;
-
-        Quaternion q = Quaternion.AngleAxis(angle, Vector3.forward);
-        agent.transform.rotation = q;
-
+   
         Debug.DrawLine(agent.transform.position, velocity.normalized, Color.green);
         Debug.DrawLine(agent.transform.position, desired, Color.blue);
+
+        return steer;
     }
 
-    void Arrive(Vector2 target)
+    Vector2 Arrive(Vector2 target)
     {
         Vector2 desired = target - new Vector2(agent.transform.position.x, agent.transform.position.y);
         float dist = desired.magnitude;
@@ -128,7 +125,6 @@ public class VehicleController : MonoBehaviour
             desired = desired.normalized * maxSpeed;
         }
 
-        
         Vector2 steer = desired - velocity;
         steer = Vector2.ClampMagnitude(steer, maxForce);
 
@@ -136,24 +132,25 @@ public class VehicleController : MonoBehaviour
         //Debug.DrawLine(velocity, steer, Color.red);
         Debug.DrawLine(agent.transform.position, desired, Color.blue);
 
-        velocity += steer;
-        agent.transform.position += new Vector3(velocity.x, velocity.y, 0f) * Time.fixedDeltaTime;
-        float angle = Mathf.Atan2(velocity.y, velocity.x) * Mathf.Rad2Deg;
-        angle -= 90f;
-
-        Quaternion q = Quaternion.AngleAxis(angle, Vector3.forward);
-        agent.transform.rotation = q;
+        return steer;
     }
 
-    void Pursue(GameObject target)
+    Vector2 Pursue(GameObject target)
     {
         Vector3 targetPos = target.transform.position;
         Vector3 prediction = target.GetComponent<VehicleController>().velocity;
         prediction *= 3; //Where the target will be in three frames
         targetPos += prediction;
+
+        return Seek(targetPos);
     }
 
-    void Wander()
+    Vector2 Evade(GameObject target)
+    {
+        return Pursue(target) * -1;
+    }
+
+    Vector2 Wander()
     {
         Vector2 desired = GetWanderForce();
         desired = desired.normalized * maxSpeed;
@@ -161,17 +158,10 @@ public class VehicleController : MonoBehaviour
         Vector2 steer = desired - velocity;
         steer = Vector2.ClampMagnitude(steer, maxForce);
 
-        velocity += steer;
-        velocity = Vector2.ClampMagnitude(velocity, maxSpeed);
-
-        agent.transform.position += new Vector3(velocity.x, velocity.y, 0f) * Time.fixedDeltaTime;
-        float angle = Mathf.Atan2(velocity.y, velocity.x) * Mathf.Rad2Deg;
-        angle -= 90f;
-        Quaternion q = Quaternion.AngleAxis(angle, Vector3.forward);
-        agent.transform.rotation = q;
-
         Debug.DrawLine(agent.transform.position, velocity, Color.green);
         Debug.DrawLine(agent.transform.position, desired, Color.blue);
+
+        return steer;
     }
 
     Vector2 GetWanderForce()
@@ -191,28 +181,21 @@ public class VehicleController : MonoBehaviour
     Vector2 GetRandomWanderForce()
     {
         Vector2 circleCenter = velocity.normalized;
-
         Vector2 displacement = Random.insideUnitCircle * r;
 
         Vector2 wanderForce = circleCenter + displacement;
         return wanderForce;
     }
 
-    void WanderNoise()
+    Vector2 WanderNoise()
     {
         float angle = Mathf.PerlinNoise(perlinOffset, 0) * (Mathf.PI*2) * 2 * Mathf.Rad2Deg;
-        //Debug.Log(angle);
         Vector2 steer = Quaternion.Euler(0,0,angle) * Vector2.right;
         steer = Vector2.ClampMagnitude(steer, maxForce);
         perlinOffset += 0.01f;
-        velocity += steer;
-        velocity = Vector2.ClampMagnitude(velocity, maxSpeed);
-        agent.transform.position += new Vector3(velocity.x, velocity.y, 0f) * Time.fixedDeltaTime;
-        float rotAngle = Mathf.Atan2(velocity.y, velocity.x) * Mathf.Rad2Deg;
-        rotAngle -= 90f;
-        Quaternion q = Quaternion.AngleAxis(rotAngle, Vector3.forward);
-        agent.transform.rotation = q;
+       
         Debug.DrawLine(agent.transform.position, velocity.normalized*-1, Color.green);
+        return steer;
     }
 
     private void OnDrawGizmos()
@@ -225,7 +208,6 @@ public class VehicleController : MonoBehaviour
 
         //Gizmos.DrawSphere(Camera.main.ScreenToWorldPoint(Input.mousePosition), slowingDistance);
     }
-
 
 }
 
